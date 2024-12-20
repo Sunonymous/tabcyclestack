@@ -9,17 +9,6 @@
     display: none; /* Chrome, Safari, Edge */
   }
 
-/* For split.js */
-.gutter {
-    background-color: #eee;
-    background-repeat: no-repeat;
-    background-position: 50%;
-}
-.gutter.gutter-vertical {
-    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAFAQMAAABo7865AAAABlBMVEVHcEzMzMzyAv2sAAAAAXRSTlMAQObYZgAAABBJREFUeF5jOAMEEAIEEFwAn3kMwcB6I2AAAAAASUVORK5CYII=');
-    cursor: row-resize;
-}
-
 /* Custom Bits */
 .dim-on-hover:hover {
     background-color: rgba(0, 0, 0, 0.1);
@@ -85,6 +74,7 @@ button.empty {
     padding: 0;
     text-align: left;
     transition: all 0.2s ease;
+    user-select: none;
 }
 button.empty:hover {
     background-color: rgba(0, 0, 0, 0.2);
@@ -140,3 +130,291 @@ button.empty:disabled:hover {
 .shelf-toggle-button:hover {
     background-color: #d8d8d8;
 }
+
+/* With the third iteration we're going to keep some CSS
+in the styles file rather than inline, except for some
+dynamic calculations */
+
+#input-bubble-overlay {
+    position: fixed;
+    top: 0%;
+    left: 0%;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 10;
+    transition: opacity 0.6s ease;
+}
+#input-bubble {
+    z-index: 11;
+    position: fixed;
+    right: 0%;
+    top: 50%;
+    width: 8px;
+    padding: 4em 6em 8em 6em;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* justify-content: center; */
+    background-color: white;
+    border: 6px solid black;
+    border-right: none;
+    border-radius: 16px 0 0 16px;
+    font-size: 2em;
+    transform: translate(100%, -50%);
+    transition: transform 0.6s ease, opacity 0.4s ease;
+    opacity: 0;
+}
+#input-bubble.active {
+    transform: translate(0%, -50%);
+    opacity: 1;
+}
+
+.floating-tab-header {
+    position: fixed;
+    font-size: 1.5rem;
+    font-family: sans-serif;
+    background-color: white;
+    padding-inline: 2.5em;
+    z-index: 11;
+    width: fit-content;
+    height: fit-content;
+    border: 3px solid black;
+    border-radius: 8px;
+    font-weight: 700;
+    transition: opacity 0.6s ease;
+}
+.floating-tab-header.active {
+    transform: translate(0%, -50%);
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    #app {
+        flex-direction: column;
+    }
+    .drawer {
+        flex-direction: column;
+    }
+    .drawer-button {
+        writing-mode: horizontal-tb;
+        transform: rotate(0deg);
+    }
+}
+
+.drawer-button {
+    border: none;
+    appearance: none;
+    outline: none;
+    background: none;
+    cursor: pointer;
+    padding: 0.25em 0.5em;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: sans-serif;
+    letter-spacing: 0.2ch;
+    transition: background-color 0.3s ease, letter-spacing 0.3s ease;
+    background-color: #f0f0f0;
+    writing-mode: vertical-lr;
+    user-select: none;
+    transform: rotate(180deg);
+
+    @media (max-width: 768px) {
+        writing-mode: horizontal-tb;
+        transform: rotate(0deg);
+    }
+}
+.drawer-button:hover {
+    background-color: #d8d8d8;
+}
+
+.drawer {
+    min-height: fit-content;
+    flex: 1 1 auto;
+    border: 1px solid black;
+    display: flex;
+    transition: flex 0.3s ease;
+}
+
+.drawer.closed {
+    flex: 0 1 auto;
+    border: none;
+    overflow-y: hidden;
+}
+
+.drawer.closed > .drawer-button {
+    letter-spacing: 0ch;
+    background-color: #bbbbbb;
+    color:rgba(0, 0, 0, 0.5)
+}
+.drawer.closed > .drawer-button:hover {
+    background-color: #999999;
+    color:rgba(0, 0, 0, 0.7)
+}
+.drawer.closed > .drawer-content {
+    opacity: 0;
+}
+.drawer-content {
+    position: relative;
+    flex: 1 1 auto;
+    opacity: 1;
+    transition: opacity 0.6s ease;
+}
+
+/* Tabs */
+ul.tab-list {
+    list-style: square;
+    padding-left: 0;
+    max-height: 75vh;
+    /* overflow-y: auto; */
+}
+
+div.tab-wrapper {
+    border-left: 2px solid rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+}
+
+div.tab-wrapper:has(.selected) {
+    border-left: 2px solid black;
+}
+
+li.single-tab::marker {
+    color: rgba(0, 0, 0, 0.2);
+}
+
+li.single-tab {
+    padding: 0.2em 0.5em;
+    color: rgba(0, 0, 0, 0.65);
+    /* TODO what do we think about this style? */
+    /* max-width: max-content;  */
+    border-radius: 0 6px 6px 0;
+    border-top:    1px solid rgba(0, 0, 0, 0.25);
+    border-right:  1px solid rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+    user-select: none;
+}
+li.single-tab:hover {
+    /* background-color: rgba(0, 0, 0, 0.2); */
+    color: black;
+    border-top:    1px solid rgba(0, 0, 0, 0.3);
+    border-right:  1px solid rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+li.single-tab.selected {
+    outline: 1px solid black;
+    background-color: rgba(0, 0, 0, 0.04);
+    border-top:    1px solid black;
+    border-right:  1px solid black;
+    border-bottom: 1px solid black;
+    color: black;
+    /* with a very light shadow */
+    box-shadow : 3px 3px 3px rgba(0, 0, 0, 0.24);
+    animation: border-move 1s infinite alternate;
+}
+li.single-tab.starred::after {
+    content: "★";
+    float: right;
+    padding-left: 0.1em;
+}
+li.single-tab.selected:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+}
+li.single-tab.selected::marker {
+    color: black;
+}
+
+span#no-stack-message {
+    user-select: none;
+    text-align: center;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+span#tab-selection-indicator {
+ /* TODO make this stay in the correct position when inside long lists */
+    /* position: fixed;
+    top: 50%;
+    right: 25%; */
+    margin-left: 0.15em;
+    font-size: 8rem;
+    opacity: 0;
+    transform: translate(-50%, 0%);
+    transition: transform 0.6s ease,
+                opacity 0.4s ease;
+}
+span#tab-selection-indicator.active {
+    opacity: 1;
+    transform: translate(0%, 0%);
+}
+
+#star-source-button {
+    position: absolute;
+    top: 1em;
+    left: 1em;
+    font-size: 2rem;
+    appearance: none;
+    background-color: transparent;
+    border: none;
+    transition: scale 0.3s ease, opacity 0.3s ease;
+    cursor: pointer;
+}
+#star-source-button:hover, #star-source-button.active:hover {
+    scale: 1.4;
+}
+#star-source-button.active {
+    scale: 1.2;
+}
+#star-source-button:focus {
+    border: none;
+    outline: none;
+}
+
+.tab-selection-controls {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25em;
+    padding: 4px;
+    opacity: 1;
+    border: 1px solid black;
+    border-radius: 4px;
+    transition: opacity 0.6s ease;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+}
+
+input#new-tab-input, input#new-stack-input {
+    margin-block: 1em;
+    max-width: 50%;
+    opacity: 42%;
+    transition: opacity 0.2s ease;
+}
+input#new-tab-input:focus, input#new-stack-input:focus {
+    opacity: 100%;
+}
+input#new-tab-input:hover:not(:focus), input#new-stack-input:hover:not(:focus) {
+    opacity: 64%;
+}
+
+/* Stacks  */
+
+#selected-stack-controls {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25em;
+    padding: 4px;
+    opacity: 1;
+    border: 1px solid black;
+    border-radius: 4px;
+    transition: opacity 0.6s ease;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+}
+/* Piles */

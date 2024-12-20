@@ -18,6 +18,7 @@
 (s/def ::db (s/keys :req-un [;; ::mode
                              ::tabs ::selected-tabs
                              ::selected-stack
+                             ::sort-stacks-by
                              ::proposed-name ::proposed-stack
                              ::cycled-stacks
                              ::cycle-presets
@@ -98,21 +99,29 @@
                             ]
           }})
 
+;; TODO so far tabs are stored as a vector, and it could be easier to work with them if they were stored in a map
+
 (def default-db
-  {:mode           :edit ;; :edit | :cycle
-   :selected-tabs  nil ;; nil | [tab-address]
-   :selected-stack nil ;; nil | stack
-   :proposed-name  nil ;; used when selecting new tab to update renaming box
-   :proposed-stack ""  ;; used when selecting new stack to move tabs
-   :pinned-tabs    #{} ;; set of tab addresses
-   :cycled-stacks  []  ;; list of tab addresses ; used for cycle mode
-   :cycle-index    0   ;; index into cycled-stacks
-   :tab-index      0   ;; index into stack at cycle-index
-   :cycle-presets  {}  ;; map of preset collections of stacks for cycle mode
+  {:mode               :edit  ;; :edit | :cycle
+   :selected-tabs      nil    ;; nil | [tab-address]
+   :tab-source         :stack ;; :stack | :star
+   :selected-stack     nil    ;; nil | stack
+   :sort-stacks-by     :alpha ;; :alpha | :count
+   :reverse-stack-sort false  ;; true | false
+   :proposed-name      nil    ;; used when selecting new tab to update renaming box
+   :proposed-stack     ""     ;; used when selecting new stack to move tabs
+   :proposed-action    nil    ;; nil | function ; partially applied event thunks
+   :starred-tabs       #{}    ;; set of tab addresses
+   :cycled-stacks      []      ;; list of tab addresses ; used for cycle mode
+   :cycle-index        0       ;; index into cycled-stacks
+   :tab-index          0      ;; index into stack at cycle-index
+   :cycle-presets      {}     ;; map of preset collections of stacks for cycle mode
+   :requested-value    nil    ;; experiment to get user choices
    :tabs {"Try Me!" [(new-tab "Add a new tab")
                      (new-tab "Delete a tab")
-                     (new-tab "Swap a tab between Stacks")
-                     (new-tab "Edit a tab")
-                     (new-tab "Hide a tab")
-                    ]
+                     (new-tab "Make a New Stack")
+                     (new-tab "Move a tab to another Stack")
+                    ;;  (new-tab "Rename a tab")
+                    ;;  (new-tab "Hide a tab")
+                     ]
           }})

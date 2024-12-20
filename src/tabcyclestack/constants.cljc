@@ -3,8 +3,9 @@
 (def constants
   {:default-stack "Try Me!"
    :modes         #{:edit :cycle}
-   :ms-in-sec     1000
-   :ms-in-min     (* 60 (:ms-in-sec constants))})
+   :ms-in-sec      1000
+   :ms-in-min      (* 60 (:ms-in-sec constants))
+   :local-db-only '(:proposed-action)})
 
 (def ms-values
   {"sec"  1000

@@ -11,6 +11,11 @@
    (:re-pressed-example db)))
 
 (re-frame/reg-sub
+ ::requested-value
+ (fn [db _]
+   (:requested-value db)))
+
+(re-frame/reg-sub
  ::mode
  (fn [db]
    (:mode db)))
@@ -29,7 +34,7 @@
  (fn [query-name]
    [(re-frame/subscribe [::unavailable-tab-labels])])
  (fn [[unavailable-names] [_ query-name]]
-   (and (> (count query-name) 0)
+   (and (> (count (.trim query-name)) 0)
         (not (some #{query-name} unavailable-names)))))
 
 (re-frame/reg-sub
@@ -47,14 +52,17 @@
         (clj->js))))
 
 (re-frame/reg-sub
- ::pinned-tabs
+ ::starred-tab-addresses
  (fn [db]
-   (:pinned-tabs db)))
+   (:starred-tabs db)))
 
 (re-frame/reg-sub
- ::pinned-tab-objs
+ ::starred-tab-objs
  (fn [db]
-   (into [] (map (fn [[stack label]] (get-tab (get-in db [:tabs stack]) label)) (:pinned-tabs db)))))
+  ;;  (into [] (map (fn [[stack label]] (get-tab (get-in db [:tabs stack]) label)) (:starred-tabs db)))
+   (into []
+         (map (fn [[stack label]] (get-tab (get-in db [:tabs stack]) label))
+              (:starred-tabs db)))))
 
 (re-frame/reg-sub
  ::tab
@@ -76,7 +84,12 @@
  ::cycled-tabs
  (fn [db]
    (into [] (mapcat (fn [stack] (visible-tabs (get-in db [:tabs stack]))) (:cycled-stacks db))))
- )
+)
+
+(re-frame/reg-sub
+ ::tab-source
+ (fn [db _]
+   (:tab-source db)))
 
 (re-frame/reg-sub
  ::tab-stack-index
@@ -104,6 +117,11 @@
    (db :selected-stack)))
 
 (re-frame/reg-sub
+ ::sort-stacks-by
+ (fn [db]
+   (db :sort-stacks-by)))
+
+(re-frame/reg-sub
  ::stacks
  (fn [db]
    (keys (:tabs db))))
@@ -117,6 +135,11 @@
  ::proposed-stack
  (fn [db]
    (:proposed-stack db)))
+
+(re-frame/reg-sub
+ ::proposed-action
+ (fn [db]
+   (:proposed-action db)))
 
 (re-frame/reg-sub
  ::cycle-index

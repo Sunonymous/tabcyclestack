@@ -9,6 +9,7 @@
 
 ;; So-called Roadmap:
 ;; TODO re-pressed was causing the warning! get rid of it
+;; TODO code needs clean up after third iteration
 ;; OTHER  ;;
 ;; TODO visual indication of having seen all tabs in cycled stack
 ;; STACKS ;;
@@ -22,7 +23,8 @@
 ;; TODO rename to piles
 ;; TODO favorite piles
 ;; TABS   ;;
-;; TODO pinned tabs
+;; TODO pinned/star tabs
+;; TODO rename tabs
 ;; TODO tab colors
 ;; TODO add tab sort buttons
 ;; TODO tab make visible button
@@ -86,29 +88,14 @@
     [:div.selector
      {:style {:margin-block :0.25em
               :min-width :max-content
-              ;; :padding-inline :0.5em
               :padding-block :0.75em
               :display :flex :flex-direction :column
               :justify-content :center
               :gap :0.2em
               ;; TODO dotted border if stack is empty?
-              :border-right  (if selected-stack "3px solid black" "3px solid transparent")
-              :border-left   (if selected-stack "3px solid black" "3px solid transparent")
-              :border-bottom (if selected-stack "3px solid black" "3px solid transparent")
+              :border  (if selected-stack "3px solid black" "3px solid transparent")
               :font-family :sans-serif
               :font-size :1.5rem}}
-     (when (seq @(re-frame/subscribe [::subs/pinned-tabs]))
-       [:div {:style {:width :100%
-                      :border (if (= "Pinned Tabs" selected-stack)
-                                "none" ;; this weird border was to assist the slight width-change
-                                "0px solid transparent") ;; with bolder fonts. there's probably a better way
-                      :display :flex :flex-direction :column}}
-        [:button.empty
-         {:style {:padding-inline :0.5em}
-          :disabled (= "Pinned Tabs" selected-stack)
-          :on-click (fn [_] (re-frame/dispatch [::events/select-stack "Pinned Tabs"])
-                      (re-frame/dispatch [::events/deselect-tab]))}
-         "Pinned Tabs"]])
      (doall
       (for [stack (sort stacks)]
         (let [stack-is-empty (= 0 @(re-frame/subscribe [::subs/stack-size stack]))]
@@ -120,7 +107,8 @@
                          :display :flex :flex-direction :column}}
            [:button.empty
             {:style {:padding-inline :0.5em}
-             :disabled (= stack selected-stack)
+             :disabled (or (= stack selected-stack)
+                           (= :star @(re-frame/subscribe [::subs/tab-source])))
              :on-click (fn [_] (re-frame/dispatch [::events/select-stack stack])
                          (re-frame/dispatch [::events/deselect-tab]))}
             stack]
@@ -232,7 +220,7 @@
         multiple-selected (< 1 (count selected-tabs))]
 
     [:span
-     {:style {:font-style :italic}}
+     {:style {:font-style :italic :font-size :1.5rem}}
      (cond ;; TODO improve ability to style text by section
        (and multiple-selected stack-differs)
        (str "Moving " (count selected-tabs) " tabs from " src-stack " to " proposed-stack ".")
@@ -248,8 +236,12 @@
 
        :else "")])) ;; no action is happening
 
+(defn floating-tab-header ; Used to indicate which modal is open.
+  [text css] ;; attach style map
+  [:span.floating-tab-header
+   {:style css}
+   text])
 
-;; TODO causes mysterious subscription warning in console, and potential memory leak
 (defn tab-editor []
   (let [stacks     @(re-frame/subscribe [::subs/stacks])]
     (fn []
@@ -261,7 +253,7 @@
             multiple-selected?    (> (count selected-tabs) 1)
             changed-label?        (not= src-label proposed-name)
             changed-stack?        (not= src-stack proposed-stack)
-            valid-label           (> (count (.trim proposed-name)) 0)]
+            valid-label           (> (count (.trim (or proposed-name ""))) 0)]
 
         [:section#tab-editor
          [:div
@@ -284,8 +276,6 @@
            (for [stack stacks]
              ^{:key stack}
              [:option {:value stack} stack])]]
-
-
          [:div
           {:style {:margin-top "0.5em"
                    :display :flex :justify-content :center
@@ -300,7 +290,6 @@
                       ;; when stack is different, change its position with the new name
                         (when changed-stack?
                           (doseq [address selected-tabs]
-                            (js/console.log "moving" address "to" proposed-stack)
                             (re-frame/dispatch [::events/move-tab address proposed-stack])))
                       ;; when only one is selected and label is different, change it
                         (when (and (not multiple-selected?) changed-label?)
@@ -310,7 +299,6 @@
                         (reset-form!)
                         (re-frame/dispatch [::events/deselect-tab]))}
            "Make it So"]]]))))
-
 
 (defn tab-selector
   []
@@ -767,7 +755,7 @@
            [tab-manager-adder]
            )]))))
 
-(defn app []
+(defn app-2 []
   (let [is-cycle-mode (= :cycle @(re-frame/subscribe [::subs/mode]))]
     [:main#app
      {:style {:display :flex :flex-direction :row
@@ -807,4 +795,345 @@
         [tab-selector])]
      [main-mode-display]
      ]))
+
+(defn drawer ;; TODO add a size parameter, which it would divide from one to set max width
+  [title child closed-child]
+  (let [open? (r/atom true)] ;; TODO reset to false in prod
+    (fn [title child closed-child]
+      [:section.drawer {:class (if @open? "open" "closed")}
+       [:button.drawer-button
+        {:on-click #(swap! open? not)}
+        title]
+       [:div.drawer-content
+        (if @open?
+          child
+          closed-child)]])))
+
+(defn stack-adder
+  []
+  (let [stack-entry (r/atom "")]
+    (fn []
+      (let [stacks       @(re-frame/subscribe [::subs/stacks])
+            valid-stack? (and (seq (.trim @stack-entry))
+                              (not (some #{@stack-entry} stacks)))]
+        [:div
+         {:style {:text-align :center}}
+         [:form {:on-submit #(.preventDefault %)} ;; don't refresh the page!
+          [:input#new-stack-input
+           {:value @stack-entry
+            :placeholder "New Stack"
+            :on-change #(reset! stack-entry (-> % .-target .-value))}]
+          [:button#add-stack-button
+           {:type :submit
+            :style {:margin :0.25em} :disabled (not valid-stack?)
+            :on-click (fn [_]
+                        (when valid-stack?
+                          (re-frame/dispatch [::events/add-empty-stack @stack-entry])
+                          (reset! stack-entry "")
+                          (.focus (.getElementById js/document "new-stack-input"))))}
+           "+"]]]))))
+
+(defn stack-sort-selector
+  []
+    [:select
+     {:style {:margin-bottom :auto}
+      :value @(re-frame/subscribe [::subs/sort-stacks-by])
+      :on-change #(re-frame/dispatch [::events/sort-stacks-by (-> % .-target .-value)])}
+     [:option {:value :alpha} "Name"]
+     [:option {:value :count} "Tab Count"]
+    ]
+  )
+
+(defn star-source-button
+  []
+  (let [star-mode (= :star @(re-frame/subscribe [::subs/tab-source]))]
+    [:button#star-source-button
+     {:class (when star-mode "active")
+      :style {:opacity (if (or star-mode
+                               (seq @(re-frame/subscribe [::subs/starred-tab-addresses])))
+                         1 0)}
+      :on-click (fn [_]
+                  (re-frame/dispatch [::events/toggle-star-source])
+                  (re-frame/dispatch [::events/deselect-stack])
+                  (re-frame/dispatch [::events/deselect-all-tabs]))}
+     (if star-mode "★" "☆")]))
+
+(defn stack-drawer
+  []
+  [drawer "Stacks"
+   [:div {:style {:position :relative
+                  :max-width :max-content :height :100%
+                  :display :flex :flex-direction :column
+                  :justify-content :center
+                  :padding-block :3em}}
+    ;; [stack-sort-selector] ;; TODO find way of sorting by count
+    [star-source-button]
+    [stack-adder]
+    [stack-selector]
+    [:div#selected-stack-controls
+     {:style {:margin-inline :auto
+              :opacity (if @(re-frame/subscribe [::subs/selected-stack])
+                         1 0)}}
+     [:button {:on-click #(re-frame/dispatch [::events/deselect-stack])}
+      "Deselect"]
+     [:button
+      {:on-click #(re-frame/dispatch [::events/propose-action :label
+                                      (fn [label]
+                                        (re-frame/dispatch [::events/rename-stack @(re-frame/subscribe [::subs/selected-stack]) label])
+                                        (re-frame/dispatch [::events/deselect-all-tabs]))])}
+      "Rename"]]]
+   nil])
+
+(defn tab-drawer-list
+  [selected-stack selected-tabs]
+  (let [starred-tab-addresses @(re-frame/subscribe [::subs/starred-tab-addresses])
+        tab-source            @(re-frame/subscribe [::subs/tab-source])
+        source-is-star        (= :star tab-source)]
+    [:ul.tab-list
+     [:div.tab-wrapper
+      (for [tab @(re-frame/subscribe (case tab-source
+                                       :stack [::subs/tabs-in-stack selected-stack]
+                                       :star  [::subs/starred-tab-objs]))]
+        (let [is-selected (some (fn [[_ label]] (= label (:label tab))) selected-tabs)
+              is-starred  (or source-is-star
+                           (some #{[selected-stack (:label tab)]} starred-tab-addresses))
+              address [(if source-is-star
+              ;; well this is ugly. just searches the tab addresses for a matching label
+                         (first (some #(when (= (second %) (:label tab)) %) starred-tab-addresses))
+                         selected-stack)
+                       (:label tab)]]
+          [:li.single-tab
+           {:key (:label tab)
+            :class (str (when is-selected "selected") " " (when is-starred "starred"))
+            :on-click #(re-frame/dispatch [(if is-selected
+                                             ::events/deselect-tab
+                                             ::events/select-additional-tab)
+                                           address])}
+           (:label tab)]))]]))
+
+(defn tab-adder
+  [selected-stack selected-tabs]
+  (let [label-entry (r/atom "")]
+    (fn [selected-stack selected-tabs]
+      (let [valid-label?   @(re-frame/subscribe [::subs/valid-tab-label? @label-entry])]
+        [:div
+         {:style {:text-align :center}}
+         [:form {:on-submit #(.preventDefault %)} ;; don't refresh the page!
+          [:input#new-tab-input
+           {:max-length 42 ;; TODO what's a good limit?
+            :value @label-entry
+            :placeholder "New Tab"
+            :on-change #(reset! label-entry (-> % .-target .-value))}]
+          [:button#add-tab-button
+           {:type :submit
+            :style {:margin :0.25em} :disabled (not valid-label?)
+            :on-click (fn [_]
+                         (when valid-label?
+                           (re-frame/dispatch [::events/add-tab [selected-stack
+                                                                 (.trim @label-entry)]])
+                           (reset! label-entry "")
+                           (.focus (.getElementById js/document "new-tab-input"))))}
+           "+"]]]))))
+
+(defn tab-drawer
+  []
+  [drawer "Tabs"
+   (let [selected-stack @(re-frame/subscribe [::subs/selected-stack])
+         selected-tabs  @(re-frame/subscribe [::subs/selected-tabs])
+         starred-tabs   @(re-frame/subscribe [::subs/starred-tab-addresses])
+         star-source     (= :star @(re-frame/subscribe [::subs/tab-source]))]
+     ;; this might be discouraged behavior! I'm really not sure.
+     ;; basically checks on every render if all any tabs are starred,
+     ;; and if not, gets you back to stack source.
+    ;;  (when (and star-source (not (seq starred-tabs)))
+    ;;    (re-frame/dispatch [::events/toggle-star-source]))
+    ;; TODO this can't be correct. it creates visible latency
+     (if (or star-source
+             selected-stack)
+       [:div {:style {:position :relative
+                      :height   :100%
+                      :display  :flex
+                      :justify-content :space-evenly
+                      :align-items :center}}
+        [:div
+         {:style {:display :flex :flex-direction :column
+                  :justify-content :center :align-items :center}}
+         (when-not star-source
+           [tab-adder selected-stack selected-tabs])
+         [tab-drawer-list selected-stack selected-tabs]]
+        [:div
+        ;;  {:style {:position :absolute :top :50% :right :1em :transform "translateY(-50%)"}}
+         {:style {:position :relative :top :1.5lh ;; bump upwards to offset the tab adder
+                  :display :flex :align-items :center}}
+         [:span#tab-selection-indicator {:class (when (seq selected-tabs) "active")}
+          "}"]
+         [:ul.tab-selection-controls
+          {:style {:opacity (if (seq selected-tabs) 1 0)}}
+          [:button {:on-click #(re-frame/dispatch [::events/deselect-all-tabs])}
+           "Deselect"]
+          [:button {:on-click (fn [_]
+                                (doseq [address selected-tabs]
+                                  (re-frame/dispatch [::events/remove-tab address]))
+                                (re-frame/dispatch [::events/deselect-all-tabs]))}
+           "Delete"]
+          (when (and (< 1 (count @(re-frame/subscribe [::subs/stacks])))
+                     (not star-source))
+            [:button {:on-click #(re-frame/dispatch [::events/propose-action :stack
+                                                     (fn [stack]
+                                                       (doseq [address selected-tabs]
+                                                         (re-frame/dispatch [::events/move-tab address stack]))
+                                                       (re-frame/dispatch [::events/deselect-all-tabs]))])}
+             "Move"])
+          (when (and (not star-source)
+                     (= 1 (count selected-tabs)))
+            [:button {:on-click #(re-frame/dispatch [::events/propose-action :label
+                                                     (fn [label]
+                                                       (re-frame/dispatch [::events/rename-tab (first selected-tabs) label])
+                                                       (re-frame/dispatch [::events/deselect-all-tabs]))])}
+             "Edit"])
+          (when-not star-source
+            [:button {:on-click #(doseq [address selected-tabs]
+                                   (re-frame/dispatch [::events/star-tab address]))}
+             "Star"])
+         ;; only appears when at least one tab is starred
+          (when (or star-source
+                    (some starred-tabs selected-tabs))
+            [:button {:on-click (fn [_]
+                                  (doseq [address selected-tabs]
+                                    (re-frame/dispatch-sync [::events/unstar-tab address]))
+                                  (re-frame/dispatch [::events/deselect-all-tabs]))}
+             "Unstar"])]]
+          ;; TODO needs button to scroll to top of container when necessary
+        ]
+       [:span#no-stack-message
+        "Select a stack to see its tabs."]))
+   nil])
+
+(defn proposed-action-description
+  [request-type user-input]
+  (let [selected-tabs @(re-frame/subscribe [::subs/selected-tabs])
+                tab-count (count selected-tabs)]
+            ;; TODO this overflows with very long tab/stack names, yet couldn't get it to work as desired
+            [:p {:style {:min-width :max-content :font-size :1rem
+                         :user-select :none}}
+             (case request-type
+               nil nil
+               :stack
+               (if (empty? user-input)
+                 "Select a new stack from the dropdown."
+                 (str "Moving "
+                      (if (= tab-count 1) ;; TODO style names a bit better
+                        (str "'" (-> selected-tabs first second) "' ")
+                        (str tab-count " tabs "))
+                      "to '" user-input "'."))
+               :label
+               (if (empty? user-input)
+                 "Enter a new label."
+                 (str "Renaming "
+                      (-> selected-tabs first second)
+                      " to '" user-input "'.")))]))
+
+(defn input-bubble
+  "Given a partially applied function waiting for an argument,
+   raises a bubble with appropriate inputs and calls the function
+   when an appropriate argument is given, or discards it otherwise."
+  []
+  (let [user-input (r/atom "")     ;; short delay to prevent flash
+        reset-input! (fn [] (js/setTimeout #(reset! user-input "") 1000))
+        submit-and-reset! (fn [_]
+                            (re-frame/dispatch [::events/agree-to-action @user-input])
+                            (reset-input!))]
+    (fn []
+      (let [give-me-a @(re-frame/subscribe [::subs/requested-value])]
+        [:div
+         (let [modal-open @(re-frame/subscribe [::subs/requested-value])]
+           [:div#input-bubble-overlay
+            {:style {:opacity (if modal-open
+                                1
+                                0)
+                     :pointer-events (if modal-open
+                                       :auto
+                                       :none)}
+             :on-click (fn [_]
+                         (re-frame/dispatch [::events/discard-action])
+                         (reset-input!))}
+            (when modal-open [floating-tab-header "Action" {:top :10% :right :0
+                                                            :border-right :none
+                                                            :border-radius "8px 0 0 8px"}])])
+         [:div#input-bubble
+          {:class (when give-me-a "active")}
+          [:div {:style {:display :flex :gap :0.5em
+                         :padding-bottom :0.5em
+                         :border-bottom "1px solid black"}}
+           (case give-me-a
+             nil nil
+             :stack
+             [:select {:style {:flex-grow 1
+                               :text-align :center
+                               :font-size :1.3rem}
+                       :value @user-input
+                       :on-change #(reset! user-input (-> % .-target .-value))}
+              [:option {:value ""} ""]
+              (doall
+               (for [stack (filter #(not= @(re-frame/subscribe [::subs/selected-stack]) %)
+                                   @(re-frame/subscribe [::subs/stacks]))]
+                 ^{:key stack}
+                 [:option {:value stack} stack]))]
+             :label
+             [:input {:auto-focus true
+                      :type :text
+                      :style {:flex-grow 1 :font-size :1.3rem :max-width :75%}
+                      :value @user-input
+                      :on-change #(reset! user-input (-> % .-target .-value))}]
+             :moment
+             [:input {:type  :radio
+                      :name  :hide-until
+                      :value :min}])
+           [:button
+            {:style {:font-size :1.2rem :min-width :max-content}
+             :disabled (or (not @(re-frame/subscribe [::subs/proposed-action]))
+                           (empty? @user-input))
+             :on-click submit-and-reset!}
+            "Make it So"]]
+          [proposed-action-description give-me-a @user-input]
+          [:button
+           {:style {;; :position :absolute
+                    :font-size :1rem
+                    ;; :bottom :40% :left :50%
+                    ;; :transform "translate(-50%, 0%)"
+                    }
+            :on-click (fn [_]
+                        (re-frame/dispatch [::events/discard-action nil])
+                        (reset-input!))}
+           "Nevermind."]]]))))
+
+;; let's really think about the layout of the full page
+;; edit mode is just a series of drawers
+;; cycle mode is just a feed of tabs, which needs only a source and controls
+
+(defn app
+  []
+    [:main#app
+     {:style {:display :flex
+              :max-width :1111px :height :100vh
+              :margin-inline :auto
+              :background-color :white
+              ;; :border-left "5px solid blue"
+              ;; :border-right "5px solid blue"
+              }}
+     ;; everything in here should be a drawer
+     ;; TODO make certain drawers take up less max space
+     #_[drawer "Piles"
+        [:p   "Open"]
+        nil]
+     [stack-drawer]
+     [tab-drawer]
+     [input-bubble]
+
+     #_[:button {:style {:position :absolute
+                         :right :0
+                         :top :0
+                         :padding-inline :0.25em}}
+        "Edit?"]]
+  )
 

@@ -25,9 +25,18 @@
 
 (def local-storage-key "tabcyclestack.db")
 
+(def db-keys-to-save [:tabs :mode :sort-stacks-by :reverse-stack-sort])
+
 (defn db->local-storage
   [db]
-  (let [json (pr-str db)]
+  ;; for now we're just saving the whole thing.
+  ;; probably a better way to do this would be to save only certain keys
+  ;; relevant to a particular user. The biggest issue that we've come
+  ;; across so far is that functions aren't serializable, and we use functions
+  ;; in the proposed-action input-bubble.
+  (let [json (pr-str (into {}
+                           (map (fn [k] [k (get db k)]) db-keys-to-save))
+                     )]
     (js/localStorage.setItem local-storage-key json)))
 
 (def save-db-local
@@ -50,10 +59,15 @@
  [(re-frame/inject-cofx ::local-store local-storage-key)]
  (fn
    [cofx _]
-   (let [persisted-db (read-string (:local-store cofx))
+   (let [persisted-db (merge db/default-db (read-string (:local-store cofx)))
          valid-db? (and persisted-db (s/valid? ::db/db persisted-db))
          next-db (if valid-db? persisted-db db/default-db)]
      {:db next-db})))
+
+(re-frame/reg-event-db
+ ::request-a
+ (fn [db [_ request-type]]
+   (assoc db :requested-value  request-type)))
 
 (re-frame/reg-event-db
  ::toggle-mode
@@ -88,13 +102,22 @@
        (assoc :selected-tabs nil))))
 
 (re-frame/reg-event-db
+ ::add-empty-stack
+ [check-db-change
+  save-db-local]
+ (fn [db [_ stack]] ;; TODO could potentially create way of "overwriting"
+   (if (get-in db [:tabs stack])  ;; existing stacks as a way of deletion
+     db
+     (assoc-in db [:tabs stack] []))))
+
+(re-frame/reg-event-db
  ::add-tab ;; uses tab address
  [check-db-change
   save-db-local]
  (fn [db [_ [stack label]]]
    (update-in db [:tabs stack] #(if (nil? %)
                                   [(new-tab label)]
-                                  (conj % (new-tab label))))))
+                                  (into [] (cons (new-tab label) %))))))
 
 (re-frame/reg-event-db
  ::remove-tab
@@ -103,7 +126,7 @@
  (fn [db [_ tab-address]]
    (let [[stack label] tab-address]
      (re-frame/dispatch [::deselect-tab])
-     (re-frame/dispatch [::unpin-tab tab-address])
+     (re-frame/dispatch [::unstar-tab tab-address])
      (update-in db [:tabs stack] #(remove-tab % label)))))
 
 (re-frame/reg-event-db
@@ -117,7 +140,18 @@
    (update-in db [:tabs] #(dissoc % stack))))
 
 (re-frame/reg-event-db
- ::rename-tab
+ ::rename-stack
+ [check-db-change
+  save-db-local]
+ (fn [db [_ stack new-name]]
+   (when (and new-name (> (count (.trim new-name)) 0))
+     (let [tabs-in-stack (get-in db [:tabs stack])]
+       (update db :tabs #(-> %
+                       (assoc new-name tabs-in-stack)
+                       (dissoc stack)))))))
+
+(re-frame/reg-event-db
+ ::rename-tab ;; TODO needs to rename any matching addresses in starred tabs
  [check-db-change
   save-db-local]
  (fn [db [_ tab-address new-name]]
@@ -166,11 +200,28 @@
    (assoc db :selected-tabs tab-addresses)))
 
 (re-frame/reg-event-db
+ ::select-additional-tab
+ (fn [db [_ tab-address]]
+   (update db :selected-tabs conj tab-address)))
+
+(re-frame/reg-event-db
+ ::deselect-tab
+ (fn [db [_ tab-address]]
+   (update db :selected-tabs (fn [addresses] (filter #(not= % tab-address) addresses)))))
+
+(re-frame/reg-event-db
+ ::deselect-all-tabs
+ (fn [db [_ tab-address]]
+   (assoc db :selected-tabs nil)))
+
+(re-frame/reg-event-db
  ::select-stack
  (fn [db [_ stack-to-select]]
    (-> db
        (assoc  :selected-stack stack-to-select)
-       (assoc  :proposed-stack stack-to-select))))
+       (assoc  :proposed-stack stack-to-select)
+       (assoc  :selected-tabs nil) ;; also clear selected tabs
+       )))
 
 (re-frame/reg-event-db
  ::propose-name
@@ -181,6 +232,32 @@
  ::propose-stack
  (fn [db [_ next-stack]]
      (assoc db :proposed-stack next-stack)))
+
+(re-frame/reg-event-db
+ ::propose-action
+ (fn [db [_ request-type next-action]]
+   (-> db
+       (assoc :proposed-action next-action)
+       (assoc :requested-value request-type))))
+
+(re-frame/reg-event-db
+ ::discard-action
+ (fn [db _]
+   (-> db
+       (assoc :proposed-action nil)
+       (assoc :requested-value nil))))
+
+(re-frame/reg-event-db
+ ::agree-to-action
+ (fn [db [_ user-input]]
+   (let [action (:proposed-action db)]
+     (cond
+       (and action user-input)
+       (action user-input)
+
+       action
+       (action))
+     (re-frame/dispatch [::propose-action nil nil]))))
 
 ;; Cycles
 
@@ -290,15 +367,29 @@
    db))
 
 (re-frame/reg-event-db
- ::pin-tab
+ ::star-tab
  [check-db-change
   save-db-local]
  (fn [db [_ tab-address]]
-   (update db :pinned-tabs #(into #{} (conj % tab-address)))))
+   (update db :starred-tabs #(into #{} (conj % tab-address)))))
 
 (re-frame/reg-event-db
- ::unpin-tab
+ ::unstar-tab
  [check-db-change
   save-db-local]
  (fn [db [_ tab-address]]
-   (update db :pinned-tabs disj tab-address)))
+   (update db :starred-tabs disj tab-address)))
+
+(re-frame/reg-event-db
+ ::sort-stacks-by
+ [check-db-change
+  save-db-local]
+ (fn [db [_ sort-by]]
+   (assoc db :sort-stacks-by sort-by)))
+
+(re-frame/reg-event-db
+ ::toggle-star-source
+ [check-db-change
+  save-db-local]
+ (fn [db _]
+   (update db :tab-source #(if (= :star %) :stack :star))))
